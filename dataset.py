@@ -74,10 +74,11 @@ class BaseDataset():
         self.vocab_l1 = self._build_vocab(1)
 
     def _build_vocab(self, l):
-        vocab = {'<eos>': (1, EOS_IDX),
-                 '<pad>': (1, PAD_IDX),
-                 '<sos>': (1, SOS_IDX),
-                 '<unk>': (1, UNK_IDX)}
+        vocab = {}
+        preprocess_vocab = {'<eos>': (0, EOS_IDX),
+                            '<pad>': (0, PAD_IDX),
+                            '<sos>': (0, SOS_IDX),
+                            '<unk>': (0, UNK_IDX)}
 
         avg_sent = 0
         for sent in self.train:
@@ -87,9 +88,14 @@ class BaseDataset():
                 nr_token, pos = vocab.get(token, (0, len(vocab)))
                 nr_token += 1
                 vocab[token] = (nr_token, pos)
+
+        keys = sorted(vocab.keys())
+        for key in keys:
+            if vocab[key][0] >= 3:
+                preprocess_vocab[key] = (vocab[key][0], len(preprocess_vocab))
         logging.info('Avg tokens per sent for l{}: {}'.format(l, avg_sent / len(self.train)))
 
-        return vocab
+        return preprocess_vocab
 
 class Dataset(torch.utils.data.Dataset):
     def __init__(self, data, vocab_l0, vocab_l1, phase):
