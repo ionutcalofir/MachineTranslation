@@ -1,3 +1,5 @@
+import os
+import shutil
 from bs4 import BeautifulSoup
 
 def generate_dataset_test_val(l0_path, l1_path, out_path):
@@ -85,6 +87,10 @@ def generate_dataset_train(l0, l1, out_path):
     print('Len: {}'.format(len(ro)))
 
 if __name__ == '__main__':
+    if os.path.isdir('./data/wmt16'):
+        shutil.rmtree('./data/wmt16')
+    os.makedirs('./data/wmt16')
+
     l0 = './data/wmt16_raw/val_newsdev2016.src.en.sgm'
     l1 = './data/wmt16_raw/val_newsdev2016.ref.ro.sgm'
     out_path = './data/wmt16/val'
@@ -95,8 +101,8 @@ if __name__ == '__main__':
     out_path = './data/wmt16/test'
     generate_dataset_test_val(l0, l1, out_path)
 
-    l0 = './data/wmt16_raw/train_europarl_v8.en'
-    l1 = './data/wmt16_raw/train_europarl_v8.ro'
+    l0 = './data/wmt16_raw/train_corpus.en'
+    l1 = './data/wmt16_raw/train_corpus.ro'
     out_path = './data/wmt16/train'
     generate_dataset_train(l0, l1, out_path)
 
