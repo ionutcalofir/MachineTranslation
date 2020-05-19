@@ -185,6 +185,13 @@ class Engine:
             print(f'\tTrain Loss: {train_loss:.3f} | Train PPL: {math.exp(train_loss):7.3f}')
             print(f'\t Val. Loss: {valid_loss:.3f} |  Val. PPL: {math.exp(valid_loss):7.3f}')
 
+    def val(self, model_path=None):
+        if model_path is not None:
+            self._model.load_state_dict(torch.load(model_path, map_location=self._device))
+
+        val_loss = self._evaluate_step_transformer(self._data_loader_val)
+        print(f'| Val Loss: {val_loss:.3f} | Val PPL: {math.exp(val_loss):7.3f} |')
+
     def test(self, model_path=None):
         if model_path is not None:
             self._model.load_state_dict(torch.load(model_path, map_location=self._device))
