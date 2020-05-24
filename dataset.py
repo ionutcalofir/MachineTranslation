@@ -46,14 +46,14 @@ class Processor:
     def unicodeToAscii(self, s):
         return ''.join(c for c in unicodedata.normalize('NFD', s) if unicodedata.category(c) != 'Mn')
 
-    def tokenize(self, sent, text_preprocessor):
+    def tokenize(self, sent, text_preprocessor, lang):
         sent = self.unicodeToAscii(sent.lower().strip())
 
         sent = re.sub(r"([.!?])", r" \1", sent)
         sent = re.sub(r"[^a-zA-Z.!?]+", r" ", sent)
 
         sent = [word for word in sent.split()]
-        if text_preprocessor == 'stemming':
+        if text_preprocessor == 'stemming' and lang == 'l0': # wo don't apply stemming on l1
             stemmer = PorterStemmer()
             sent = [stemmer.stem(word) for word in sent]
 
@@ -142,7 +142,7 @@ class Dataset(torch.utils.data.Dataset):
         tokens0 = self._processor.tokenize(sent0, self._text_preprocessor)
         tokens1 = self._processor.tokenize(sent1, self._text_preprocessor)
 
-        tokens0_to_ids = self._processor.tokens2ids(tokens0, self._vocab_l0)
-        tokens1_to_ids = self._processor.tokens2ids(tokens1, self._vocab_l1)
+        tokens0_to_ids = self._processor.tokens2ids(tokens0, self._vocab_l0, lang='l0')
+        tokens1_to_ids = self._processor.tokens2ids(tokens1, self._vocab_l1, lang='l1')
 
         return tokens0_to_ids, tokens1_to_ids

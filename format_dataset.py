@@ -46,6 +46,9 @@ def generate_dataset_test_val(l0_path, l1_path, out_path):
     print('Len: {}'.format(sz))
 
 def check_train_data(text):
+    if text.startswith('('):
+        return 0
+
     if len(text) < 3:
         return 0
 
@@ -64,6 +67,7 @@ def generate_dataset_train(l0, l1, out_path):
 
         if not check_train_data(line0) or not check_train_data(line1):
             continue
+
         en.append(line0)
         ro.append(line1)
     f_en.close()
