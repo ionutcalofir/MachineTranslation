@@ -46,7 +46,7 @@ class Engine:
         self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # Detect if GPU is available
         self._dataset = BaseDataset(data_path, name_suffix, self._use_w2v, self._text_preprocessor)
         self._my_collator = MyCollator()
-        self._processor = Processor()
+        self._processor = Processor(self._text_preprocessor)
 
         self._data_loader_train = \
             torch.utils.data.DataLoader(Dataset(data=self._dataset.train,
@@ -227,7 +227,7 @@ class Engine:
             self._model.load_state_dict(torch.load(model_path, map_location=self._device))
         self._model.eval()
 
-        tokens = self._processor.tokenize(sentence)
+        tokens = self._processor.tokenize(sentence, 0)
         tokens_ids = self._processor.tokens2ids(tokens, self._dataset.vocab_l0)
         tokens_ids.insert(0, SOS_IDX)
         tokens_ids.append(EOS_IDX)
@@ -253,8 +253,11 @@ class Engine:
             if pred_token == EOS_IDX:
                 break
 
-        inv_vocab = {val[1]: key for key, val in self._dataset.vocab_l1.items()}
-        trg_tokens = [inv_vocab[i] for i in trg_indexes]
+        if self._text_preprocessor == 'bert_tokenizer':
+            trg_tokens = self._processor._tokenizer_l1.decode(trg_indexes + [EOS_IDX]).split()
+        else:
+            inv_vocab = {val[1]: key for key, val in self._dataset.vocab_l1.items()}
+            trg_tokens = [inv_vocab[i] for i in trg_indexes]
         return trg_tokens[1:], attention
 
     def calculate_bleu(self, model_path=None):
@@ -264,7 +267,7 @@ class Engine:
         for i, (src_sent, trg_sent) in enumerate(self._dataset.test):
             if (i % 100 == 0):
                 print('Test sentence: {}/{}'.format(i, len(self._dataset.test)))
-            trg = self._processor.tokenize(trg_sent)
+            trg = self._processor.tokenize(trg_sent, 1)
 
             pred_trg, _ = self.translate_sentence(src_sent, model_path=model_path)
 

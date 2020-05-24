@@ -7,6 +7,7 @@ import numpy as np
 from nltk.stem.porter import *
 from absl import logging
 from sklearn.model_selection import train_test_split
+from tokenizers import BertWordPieceTokenizer
 
 MAX_TOKENS = 50
 UNK_IDX = 0
@@ -43,19 +44,43 @@ class MyCollator:
         return torch.from_numpy(src), torch.from_numpy(trg)
 
 class Processor:
+    def __init__(self, text_preprocessor):
+        self._text_preprocessor = text_preprocessor
+        if text_preprocessor == 'stemming':
+            self._stemmer = PorterStemmer()
+        elif text_preprocessor == 'bert_tokenizer':
+            self._tokenizer_l0 = BertWordPieceTokenizer(vocab_file='./tokenizer/vocab_files/bert-wordpiece-en-vocab.txt',
+                clean_text=True, strip_accents=True, lowercase=True,)
+            self._tokenizer_l1 = BertWordPieceTokenizer(vocab_file='./tokenizer/vocab_files/bert-wordpiece-ro-vocab.txt',
+                clean_text=True, strip_accents=True, lowercase=True,)
+
     def unicodeToAscii(self, s):
         return ''.join(c for c in unicodedata.normalize('NFD', s) if unicodedata.category(c) != 'Mn')
 
-    def tokenize(self, sent, text_preprocessor, lang):
-        sent = self.unicodeToAscii(sent.lower().strip())
+    def tokenize(self, sent, lang):
+        if self._text_preprocessor == 'bert_tokenizer':
+            if lang == 0:
+                output = self._tokenizer_l0.encode(sent)
+            else:
+                output = self._tokenizer_l1.encode(sent)
+            tokens = output.tokens[1:-1]
+            sent = []
+            for token in tokens:
+                if token == "[UNK]" or token == "[MASK]":
+                    token = '<unk>'
+                elif token == "[PAD]":
+                    token = '<pad>'
 
-        sent = re.sub(r"([.!?])", r" \1", sent)
-        sent = re.sub(r"[^a-zA-Z.!?]+", r" ", sent)
+                sent.append(token)
+        else:
+            sent = self.unicodeToAscii(sent.lower().strip())
 
-        sent = [word for word in sent.split()]
-        if text_preprocessor == 'stemming' and lang == 'l0': # wo don't apply stemming on l1
-            stemmer = PorterStemmer()
-            sent = [stemmer.stem(word) for word in sent]
+            sent = re.sub(r"([.!?])", r" \1", sent)
+            sent = re.sub(r"[^a-zA-Z.!?]+", r" ", sent)
+
+            sent = [word for word in sent.split()]
+            if self._text_preprocessor == 'stemming' and lang == 0: # we don't apply stemming on l1
+                sent = [self._stemmer.stem(word) for word in sent]
 
         return sent
 
@@ -68,9 +93,8 @@ class BaseDataset():
     def __init__(self, data_path, name_suffix, use_w2v, text_preprocessor):
         self._data_path = data_path
         self._name_suffix = name_suffix
-        self._processor = Processor()
+        self._processor = Processor(text_preprocessor)
         self._use_w2v = use_w2v
-        self._text_preprocessor = text_preprocessor
 
         self.train = [(line.strip().split('\t')[0], line.strip().split('\t')[1])
                         for line in open(os.path.join(data_path, 'train_{}.txt'.format(self._name_suffix)), 'r')]
@@ -104,12 +128,24 @@ class BaseDataset():
                             '<pad>': (0, PAD_IDX),
                             '<sos>': (0, SOS_IDX),
                             '<unk>': (0, UNK_IDX)}
+        if self._processor._text_preprocessor == 'bert_tokenizer':
+            assert self._processor._tokenizer_l0.token_to_id("[CLS]") == self._processor._tokenizer_l1.token_to_id("[CLS]")
+            assert self._processor._tokenizer_l0.token_to_id("[SEP]") == self._processor._tokenizer_l1.token_to_id("[SEP]")
+            assert self._processor._tokenizer_l0.token_to_id("[PAD]") == self._processor._tokenizer_l1.token_to_id("[PAD]")
+            assert self._processor._tokenizer_l0.token_to_id("[UNK]") == self._processor._tokenizer_l1.token_to_id("[UNK]")
+            preprocess_vocab = {'<eos>': (0, self._processor._tokenizer_l0.token_to_id("[SEP]")),
+                                '<pad>': (0, self._processor._tokenizer_l0.token_to_id("[PAD]")),
+                                '<sos>': (0, self._processor._tokenizer_l0.token_to_id("[CLS]")),
+                                '<unk>': (0, self._processor._tokenizer_l0.token_to_id("[UNK]"))}
 
         avg_sent = 0
         for sent in self.train:
-            tokens = self._processor.tokenize(sent[l], self._text_preprocessor)
+            tokens = self._processor.tokenize(sent[l], lang=l)
             avg_sent += len(tokens)
             for token in tokens:
+                if token in ['<pad>', '<unk>']:
+                    continue
+
                 nr_token, pos = vocab.get(token, (0, len(vocab)))
                 nr_token += 1
                 vocab[token] = (nr_token, pos)
@@ -128,9 +164,8 @@ class Dataset(torch.utils.data.Dataset):
         self._vocab_l0 = vocab_l0
         self._vocab_l1 = vocab_l1
         self._phase = phase
-        self._text_preprocessor = text_preprocessor
 
-        self._processor = Processor()
+        self._processor = Processor(text_preprocessor)
 
     def __len__(self):
         return len(self._data)
@@ -139,10 +174,10 @@ class Dataset(torch.utils.data.Dataset):
         sent0 = self._data[idx][0]
         sent1 = self._data[idx][1]
 
-        tokens0 = self._processor.tokenize(sent0, self._text_preprocessor)
-        tokens1 = self._processor.tokenize(sent1, self._text_preprocessor)
+        tokens0 = self._processor.tokenize(sent0, lang=0)
+        tokens1 = self._processor.tokenize(sent1, lang=1)
 
-        tokens0_to_ids = self._processor.tokens2ids(tokens0, self._vocab_l0, lang='l0')
-        tokens1_to_ids = self._processor.tokens2ids(tokens1, self._vocab_l1, lang='l1')
+        tokens0_to_ids = self._processor.tokens2ids(tokens0, self._vocab_l0)
+        tokens1_to_ids = self._processor.tokens2ids(tokens1, self._vocab_l1)
 
         return tokens0_to_ids, tokens1_to_ids

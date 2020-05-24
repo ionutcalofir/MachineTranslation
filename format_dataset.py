@@ -46,10 +46,10 @@ def generate_dataset_test_val(l0_path, l1_path, out_path):
     print('Len: {}'.format(sz))
 
 def check_train_data(text):
-    if text.startswith('('):
-        return 0
-
-    if len(text) < 3:
+    if len(text) < 3 \
+            or text.startswith('(') \
+            or text.startswith('-') \
+            or text[0].isdigit():
         return 0
 
     return 1
