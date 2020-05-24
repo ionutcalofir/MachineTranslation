@@ -9,10 +9,15 @@ flags.DEFINE_enum('phase', None, ['train', 'test', 'inference', 'val'], 'Phase t
 flags.DEFINE_string('data_path', './data/wmt16', 'Path to dataset.')
 flags.DEFINE_string('name_suffix', 'enro', 'What dataset to use.')
 flags.DEFINE_string('sentence', 'My name is Jarvis!', 'Sentence to translate.')
-flags.DEFINE_string('model_path', './models_baseline/model_transformer_enro.pt', 'Path to model.')
+flags.DEFINE_string('model_path', './models/model_transformer_enro.pt', 'Path to model.')
+flags.DEFINE_bool('use_w2v', False, 'Whether to use word2vec.')
+flags.DEFINE_bool('freeze_w2v', True, 'Whether to freeze the w2v embeddings.')
+flags.DEFINE_enum('text_preprocessor', None, ['stemming', 'bert_tokenizer'], 'How to preprocess the text. If None, the sentences will be split by space, \
+                  if "stemming", the sentence will be split by space and the words will be stemmed, if "tokenizer", the BERT tokenizer will be applied.')
 
 def main(_):
-    engine = Engine(FLAGS.data_path, FLAGS.name_suffix, FLAGS.model_path)
+    engine = Engine(FLAGS.data_path, FLAGS.name_suffix, FLAGS.model_path,
+                    FLAGS.use_w2v, FLAGS.freeze_w2v, FLAGS.text_preprocessor)
 
     if FLAGS.phase == 'train':
         engine.train()

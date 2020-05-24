@@ -10,12 +10,17 @@ class Encoder(nn.Module):
                  pf_dim,
                  dropout, 
                  device,
-                 max_length = 100):
+                 max_length = 100,
+                 weights=None,
+                 freeze_weights=True):
         super().__init__()
 
         self.device = device
         
-        self.tok_embedding = nn.Embedding(input_dim, hid_dim)
+        if weights is None:
+            self.tok_embedding = nn.Embedding(input_dim, hid_dim)
+        else:
+            self.tok_embedding = nn.Embedding.from_pretrained(weights, freeze=freeze_weights)
         self.pos_embedding = nn.Embedding(max_length, hid_dim)
         
         self.layers = nn.ModuleList([EncoderLayer(hid_dim, 

@@ -13,14 +13,23 @@ class Engine:
                  data_path,
                  name_suffix,
                  model_path,
+                 use_w2v,
+                 freeze_w2v,
+                 text_preprocessor,
                  batch_size=32,
-                 hid_dim=256,
+                 # hid_dim=256,
+                 # hid_dim=128,
+                 hid_dim=300,
                  enc_layers=3,
                  dec_layers=3,
-                 enc_heads=8,
-                 dec_heads=8,
-                 enc_pf_dim=512,
-                 dec_pf_dim=512,
+                 # enc_heads=8,
+                 # dec_heads=8,
+                 # enc_pf_dim=512,
+                 # dec_pf_dim=512,
+                 enc_heads=4,
+                 dec_heads=4,
+                 enc_pf_dim=256,
+                 dec_pf_dim=256,
                  enc_dropout=0.1,
                  dec_dropout=0.1,
                  learning_rate=0.0005,
@@ -30,9 +39,12 @@ class Engine:
         self._clip = clip
         self._batch_size = batch_size
         self._model_path = model_path
+        self._use_w2v = use_w2v
+        self._freeze_w2v = freeze_w2v
+        self._text_preprocessor = text_preprocessor
 
         self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # Detect if GPU is available
-        self._dataset = BaseDataset(data_path, name_suffix)
+        self._dataset = BaseDataset(data_path, name_suffix, self._use_w2v, self._text_preprocessor)
         self._my_collator = MyCollator()
         self._processor = Processor()
 
@@ -40,7 +52,8 @@ class Engine:
             torch.utils.data.DataLoader(Dataset(data=self._dataset.train,
                                                 vocab_l0=self._dataset.vocab_l0,
                                                 vocab_l1=self._dataset.vocab_l1,
-                                                phase='train'),
+                                                phase='train',
+                                                text_preprocessor=self._text_preprocessor),
                                         batch_size=32,
                                         shuffle=False,
                                         collate_fn=self._my_collator)
@@ -49,7 +62,8 @@ class Engine:
             torch.utils.data.DataLoader(Dataset(data=self._dataset.val,
                                                 vocab_l0=self._dataset.vocab_l0,
                                                 vocab_l1=self._dataset.vocab_l1,
-                                                phase='val'),
+                                                phase='val',
+                                                text_preprocessor=self._text_preprocessor),
                                         batch_size=32,
                                         shuffle=False,
                                         collate_fn=self._my_collator)
@@ -58,7 +72,8 @@ class Engine:
             torch.utils.data.DataLoader(Dataset(data=self._dataset.test,
                                                 vocab_l0=self._dataset.vocab_l0,
                                                 vocab_l1=self._dataset.vocab_l1,
-                                                phase='test'),
+                                                phase='test',
+                                                text_preprocessor=self._text_preprocessor),
                                         batch_size=32,
                                         shuffle=False,
                                         collate_fn=self._my_collator)
@@ -66,6 +81,9 @@ class Engine:
         input_dim = len(self._dataset.vocab_l0)
         output_dim = len(self._dataset.vocab_l1)
 
+        weights = None
+        if self._use_w2v:
+            weights = torch.from_numpy(self._dataset.w2v_l0).float().to(self._device)
         enc = model_transformer.Encoder(input_dim,
                                         hid_dim,
                                         enc_layers,
@@ -73,7 +91,9 @@ class Engine:
                                         enc_pf_dim,
                                         enc_dropout,
                                         self._device,
-                                        max_length=MAX_TOKENS + 2)
+                                        max_length=MAX_TOKENS + 2,
+                                        weights=weights,
+                                        freeze_weights=self._freeze_w2v)
 
         dec = model_transformer.Decoder(output_dim,
                                         hid_dim,
