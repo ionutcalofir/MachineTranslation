@@ -133,10 +133,20 @@ class BaseDataset():
             assert self._processor._tokenizer_l0.token_to_id("[SEP]") == self._processor._tokenizer_l1.token_to_id("[SEP]")
             assert self._processor._tokenizer_l0.token_to_id("[PAD]") == self._processor._tokenizer_l1.token_to_id("[PAD]")
             assert self._processor._tokenizer_l0.token_to_id("[UNK]") == self._processor._tokenizer_l1.token_to_id("[UNK]")
+            global UNK_IDX
+            global PAD_IDX
+            global SOS_IDX
+            global EOS_IDX
+
             preprocess_vocab = {'<eos>': (0, self._processor._tokenizer_l0.token_to_id("[SEP]")),
                                 '<pad>': (0, self._processor._tokenizer_l0.token_to_id("[PAD]")),
                                 '<sos>': (0, self._processor._tokenizer_l0.token_to_id("[CLS]")),
                                 '<unk>': (0, self._processor._tokenizer_l0.token_to_id("[UNK]"))}
+
+            UNK_IDX = preprocess_vocab['<unk>'][1]
+            PAD_IDX = preprocess_vocab['<pad>'][1]
+            SOS_IDX = preprocess_vocab['<sos>'][1]
+            EOS_IDX = preprocess_vocab['<eos>'][1]
 
         avg_sent = 0
         for sent in self.train:
