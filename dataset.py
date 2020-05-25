@@ -123,6 +123,11 @@ class BaseDataset():
         return embds
 
     def _build_vocab(self, l):
+        global UNK_IDX
+        global PAD_IDX
+        global SOS_IDX
+        global EOS_IDX
+
         vocab = {}
         preprocess_vocab = {'<eos>': (0, EOS_IDX),
                             '<pad>': (0, PAD_IDX),
@@ -133,10 +138,6 @@ class BaseDataset():
             assert self._processor._tokenizer_l0.token_to_id("[SEP]") == self._processor._tokenizer_l1.token_to_id("[SEP]")
             assert self._processor._tokenizer_l0.token_to_id("[PAD]") == self._processor._tokenizer_l1.token_to_id("[PAD]")
             assert self._processor._tokenizer_l0.token_to_id("[UNK]") == self._processor._tokenizer_l1.token_to_id("[UNK]")
-            global UNK_IDX
-            global PAD_IDX
-            global SOS_IDX
-            global EOS_IDX
 
             preprocess_vocab = {'<eos>': (0, self._processor._tokenizer_l0.token_to_id("[SEP]")),
                                 '<pad>': (0, self._processor._tokenizer_l0.token_to_id("[PAD]")),
