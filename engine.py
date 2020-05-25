@@ -4,9 +4,14 @@ import torch.nn as nn
 import torch.utils.data
 from torchtext.data.metrics import bleu_score
 
-from dataset import EOS_IDX, PAD_IDX, SOS_IDX, UNK_IDX, MAX_TOKENS
+from dataset import MAX_TOKENS
 from dataset import BaseDataset, Dataset, MyCollator, Processor
 import model_transformer
+
+UNK_IDX = -1
+PAD_IDX = -1
+SOS_IDX = -1
+EOS_IDX = -1
 
 class Engine:
     def __init__(self,
@@ -45,6 +50,16 @@ class Engine:
 
         self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # Detect if GPU is available
         self._dataset = BaseDataset(data_path, name_suffix, self._use_w2v, self._text_preprocessor)
+        global UNK_IDX
+        global PAD_IDX
+        global SOS_IDX
+        global EOS_IDX
+
+        UNK_IDX = self._dataset.vocab_l0['<unk>'][1]
+        PAD_IDX = self._dataset.vocab_l0['<pad>'][1]
+        SOS_IDX = self._dataset.vocab_l0['<sos>'][1]
+        EOS_IDX = self._dataset.vocab_l0['<eos>'][1]
+
         self._my_collator = MyCollator()
         self._processor = Processor(self._text_preprocessor)
 
@@ -253,11 +268,12 @@ class Engine:
             if pred_token == EOS_IDX:
                 break
 
+        inv_vocab = {val[1]: key for key, val in self._dataset.vocab_l1.items()}
+        trg_tokens = [inv_vocab[i] for i in trg_indexes]
+
         if self._text_preprocessor == 'bert_tokenizer':
-            trg_tokens = self._processor._tokenizer_l1.decode(trg_indexes + [EOS_IDX]).split()
-        else:
-            inv_vocab = {val[1]: key for key, val in self._dataset.vocab_l1.items()}
-            trg_tokens = [inv_vocab[i] for i in trg_indexes]
+            trg_tokens = self._dataset.decode_bert(trg_tokens)
+
         return trg_tokens[1:], attention
 
     def calculate_bleu(self, model_path=None):
@@ -275,6 +291,9 @@ class Engine:
             pred_trg = pred_trg[:-1]
 
             pred_trgs.append(pred_trg)
+
+            if self._text_preprocessor == 'bert_tokenizer':
+                trg = self._dataset.decode_bert(trg)
             trgs.append([trg])
 
             # print()

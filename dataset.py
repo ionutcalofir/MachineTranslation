@@ -109,6 +109,23 @@ class BaseDataset():
         if self._use_w2v:
             self.w2v_l0 = self._build_word2vec(self.vocab_l0)
 
+    def decode_bert(self, tokens):
+        if len(tokens) == 0:
+            return []
+
+        out = [tokens[0]]
+        for i in range(1, len(tokens)):
+            if tokens[i] == '<unk>' or tokens[i] == '<pad>':
+                continue
+            assert tokens[i] != '<sos>'
+
+            if tokens[i].startswith('##'):
+                out[len(out) - 1] += tokens[i][2:]
+            else:
+                out.append(tokens[i])
+
+        return out
+
     def _build_word2vec(self, vocab):
         logging.info('Loading w2v')
         w2v = gensim.downloader.load('word2vec-google-news-300')
