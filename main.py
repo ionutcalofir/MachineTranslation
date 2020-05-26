@@ -5,6 +5,7 @@ from engine import Engine
 
 FLAGS = flags.FLAGS
 
+flags.DEFINE_enum('model_name', None, ['transformer', 'rnn'], 'transformer')
 flags.DEFINE_enum('phase', None, ['train', 'test', 'inference', 'val'], 'Phase to run.')
 flags.DEFINE_string('data_path', './data/wmt16', 'Path to dataset.')
 flags.DEFINE_string('name_suffix', 'enro', 'What dataset to use.')
@@ -16,7 +17,7 @@ flags.DEFINE_enum('text_preprocessor', None, ['stemming', 'bert_tokenizer'], 'Ho
                   if "stemming", the sentence will be split by space and the words will be stemmed, if "tokenizer", the BERT tokenizer will be applied.')
 
 def main(_):
-    engine = Engine(FLAGS.data_path, FLAGS.name_suffix, FLAGS.model_path,
+    engine = Engine(FLAGS.model_name, FLAGS.data_path, FLAGS.name_suffix, FLAGS.model_path,
                     FLAGS.use_w2v, FLAGS.freeze_w2v, FLAGS.text_preprocessor)
 
     if FLAGS.phase == 'train':

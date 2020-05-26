@@ -7,6 +7,7 @@ from torchtext.data.metrics import bleu_score
 from dataset import MAX_TOKENS
 from dataset import BaseDataset, Dataset, MyCollator, Processor
 import model_transformer
+import model_rnn
 
 UNK_IDX = -1
 PAD_IDX = -1
@@ -15,6 +16,7 @@ EOS_IDX = -1
 
 class Engine:
     def __init__(self,
+                 model_name,
                  data_path,
                  name_suffix,
                  model_path,
@@ -39,7 +41,14 @@ class Engine:
                  dec_dropout=0.1,
                  learning_rate=0.0005,
                  n_epochs=10,
-                 clip=1):
+                 clip=1,
+                 rnn_enc_emb_dim=128,
+                 rnn_dec_emb_dim=128,
+                 rnn_enc_hid_dim=256,
+                 rnn_dec_hid_dim=256,
+                 rnn_enc_dropout=0.5,
+                 rnn_dec_dropout=0.5):
+        self._model_name = model_name
         self._n_epochs = n_epochs
         self._clip = clip
         self._batch_size = batch_size
@@ -96,34 +105,46 @@ class Engine:
         input_dim = len(self._dataset.vocab_l0)
         output_dim = len(self._dataset.vocab_l1)
 
-        weights = None
-        if self._use_w2v:
-            weights = torch.from_numpy(self._dataset.w2v_l0).float().to(self._device)
-        enc = model_transformer.Encoder(input_dim,
-                                        hid_dim,
-                                        enc_layers,
-                                        enc_heads,
-                                        enc_pf_dim,
-                                        enc_dropout,
-                                        self._device,
-                                        max_length=MAX_TOKENS + 2,
-                                        weights=weights,
-                                        freeze_weights=self._freeze_w2v)
+        if self._model_name == 'transformer':
+            weights = None
+            if self._use_w2v:
+                weights = torch.from_numpy(self._dataset.w2v_l0).float().to(self._device)
+            enc = model_transformer.Encoder(input_dim,
+                                            hid_dim,
+                                            enc_layers,
+                                            enc_heads,
+                                            enc_pf_dim,
+                                            enc_dropout,
+                                            self._device,
+                                            max_length=MAX_TOKENS + 2,
+                                            weights=weights,
+                                            freeze_weights=self._freeze_w2v)
 
-        dec = model_transformer.Decoder(output_dim,
-                                        hid_dim,
-                                        dec_layers,
-                                        dec_heads,
-                                        dec_pf_dim,
-                                        dec_dropout,
-                                        self._device,
-                                        max_length=MAX_TOKENS + 2)
+            dec = model_transformer.Decoder(output_dim,
+                                            hid_dim,
+                                            dec_layers,
+                                            dec_heads,
+                                            dec_pf_dim,
+                                            dec_dropout,
+                                            self._device,
+                                            max_length=MAX_TOKENS + 2)
 
-        self._model = model_transformer.Seq2Seq(enc, dec, PAD_IDX, PAD_IDX, self._device).to(self._device)
+            self._model = model_transformer.Seq2Seq(enc, dec, PAD_IDX, PAD_IDX, self._device).to(self._device)
+        else:
+            attn = model_rnn.Attention(rnn_enc_hid_dim, rnn_dec_hid_dim)
+            enc = model_rnn.Encoder(input_dim, rnn_enc_emb_dim, rnn_enc_hid_dim, rnn_dec_hid_dim, rnn_enc_dropout)
+            dec = model_rnn.Decoder(output_dim, rnn_dec_emb_dim, rnn_enc_hid_dim, rnn_dec_hid_dim, rnn_dec_dropout, attn)
+
+            self._model = model_rnn.Seq2Seq(enc, dec, self._device).to(self._device)
+
         self._count_parameters(self._model)
         self._model.apply(self._initialize_weights)
 
-        self._optimizer = torch.optim.Adam(self._model.parameters(), lr=learning_rate)
+        if self._model_name == 'transformer':
+            self._optimizer = torch.optim.Adam(self._model.parameters(), lr=learning_rate)
+        else:
+            self._optimizer = torch.optim.Adam(self._model.parameters())
+
         self._criterion = nn.CrossEntropyLoss(ignore_index=PAD_IDX)
 
     def _count_parameters(self, model):
@@ -131,8 +152,15 @@ class Engine:
         print('The model has {} trainable parameters'.format(parameters))
 
     def _initialize_weights(self, m):
-        if hasattr(m, 'weight') and m.weight.dim() > 1:
-            nn.init.xavier_uniform_(m.weight.data)
+        if self._model_name == 'transformer':
+            if hasattr(m, 'weight') and m.weight.dim() > 1:
+                nn.init.xavier_uniform_(m.weight.data)
+        else:
+            for name, param in m.named_parameters():
+                if 'weight' in name:
+                    nn.init.normal_(param.data, mean=0, std=0.01)
+                else:
+                    nn.init.constant_(param.data, 0)
 
     def _epoch_time(self, start_time, end_time):
         elapsed_time = end_time - start_time
@@ -140,7 +168,7 @@ class Engine:
         elapsed_secs = int(elapsed_time - (elapsed_mins * 60))
         return elapsed_mins, elapsed_secs
 
-    def _train_step_transformer(self):
+    def _train_step(self):
         self._model.train()
         epoch_loss = 0
 
@@ -151,19 +179,24 @@ class Engine:
             src = src.to(self._device)
             trg = trg.to(self._device)
 
-            self._optimizer.zero_grad()
-            output, _ = self._model(src, trg[:, :-1])
+            if self._model_name == 'rnn':
+                src = src.permute(1, 0)
+                trg = trg.permute(1, 0)
 
-            # output = [batch size, trg len - 1, output dim]
-            # trg = [batch size, trg len]
+            self._optimizer.zero_grad()
+            if self._model_name == 'transformer':
+                output, _ = self._model(src, trg[:, :-1])
+            else:
+                output = self._model(src, trg)
 
             output_dim = output.shape[-1]
 
-            output = output.contiguous().view(-1, output_dim)
-            trg = trg[:, 1:].contiguous().view(-1)
-
-            # output = [batch size * trg len - 1, output dim]
-            # trg = [batch size * trg len - 1]
+            if self._model_name == 'transformer':
+                output = output.contiguous().view(-1, output_dim)
+                trg = trg[:, 1:].contiguous().view(-1)
+            else:
+                output = output[1:].contiguous().view(-1, output_dim)
+                trg = trg[1:].contiguous().view(-1)
 
             loss = self._criterion(output, trg)
             loss.backward()
@@ -173,7 +206,7 @@ class Engine:
 
         return epoch_loss / len(self._data_loader_train)
 
-    def _evaluate_step_transformer(self, iterator):
+    def _evaluate_step(self, iterator):
         self._model.eval()
         epoch_loss = 0
 
@@ -184,18 +217,23 @@ class Engine:
             src = src.to(self._device)
             trg = trg.to(self._device)
 
-            output, _ = self._model(src, trg[:, :-1])
+            if self._model_name == 'rnn':
+                src = src.permute(1, 0)
+                trg = trg.permute(1, 0)
 
-            # output = [batch size, trg len - 1, output dim]
-            # trg = [batch size, trg len]
+            if self._model_name == 'transformer':
+                output, _ = self._model(src, trg[:, :-1])
+            else:
+                output = model(src, trg, 0) #turn off teacher forcing
 
             output_dim = output.shape[-1]
 
-            output = output.contiguous().view(-1, output_dim)
-            trg = trg[:, 1:].contiguous().view(-1)
-
-            # output = [batch size * trg len - 1, output dim]
-            # trg = [batch size * trg len - 1]
+            if self._model_name == 'transformer':
+                output = output.contiguous().view(-1, output_dim)
+                trg = trg[:, 1:].contiguous().view(-1)
+            else:
+                output = output[1:].contiguous().view(-1, output_dim)
+                trg = trg[1:].contiguous().view(-1)
 
             loss = self._criterion(output, trg)
             epoch_loss += loss.item()
@@ -206,8 +244,8 @@ class Engine:
         best_valid_loss = float('inf')
         for epoch in range(self._n_epochs):
             start_time = time.time()
-            train_loss = self._train_step_transformer()
-            valid_loss = self._evaluate_step_transformer(self._data_loader_val)
+            train_loss = self._train_step()
+            valid_loss = self._evaluate_step(self._data_loader_val)
             end_time = time.time()
 
             epoch_mins, epoch_secs = self._epoch_time(start_time, end_time)
@@ -224,14 +262,14 @@ class Engine:
         if model_path is not None:
             self._model.load_state_dict(torch.load(model_path, map_location=self._device))
 
-        val_loss = self._evaluate_step_transformer(self._data_loader_val)
+        val_loss = self._evaluate_step(self._data_loader_val)
         print(f'| Val Loss: {val_loss:.3f} | Val PPL: {math.exp(val_loss):7.3f} |')
 
     def test(self, model_path=None):
         if model_path is not None:
             self._model.load_state_dict(torch.load(model_path, map_location=self._device))
 
-        test_loss = self._evaluate_step_transformer(self._data_loader_test)
+        test_loss = self._evaluate_step(self._data_loader_test)
         print(f'| Test Loss: {test_loss:.3f} | Test PPL: {math.exp(test_loss):7.3f} |')
 
         bleu_score = self.calculate_bleu(model_path=None)
