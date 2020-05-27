@@ -224,7 +224,7 @@ class Engine:
             if self._model_name == 'transformer':
                 output, _ = self._model(src, trg[:, :-1])
             else:
-                output = model(src, trg, 0) #turn off teacher forcing
+                output = self._model(src, trg, 0) #turn off teacher forcing
 
             output_dim = output.shape[-1]
 
