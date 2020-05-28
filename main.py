@@ -5,7 +5,7 @@ from engine import Engine
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_enum('phase', None, ['train', 'test', 'inference', 'val'], 'Phase to run.')
+flags.DEFINE_enum('phase', None, ['train', 'test', 'inference', 'val', 'show_attention'], 'Phase to run.')
 flags.DEFINE_string('data_path', './data/wmt16', 'Path to dataset.')
 flags.DEFINE_string('name_suffix', 'enro', 'What dataset to use.')
 flags.DEFINE_string('sentence', 'My name is Jarvis!', 'Sentence to translate.')
@@ -28,6 +28,13 @@ def main(_):
     elif FLAGS.phase == 'inference':
         print('Original sentence: {}'.format(FLAGS.sentence))
         print('Translated sentence: {}'.format(' '.join(engine.translate_sentence(FLAGS.sentence, model_path=FLAGS.model_path)[0])))
+    elif FLAGS.phase == 'show_attention':
+        trg, attn = engine.translate_sentence(FLAGS.sentence, model_path=FLAGS.model_path)
+        print('Original sentence: {}'.format(FLAGS.sentence))
+        print('Translated sentence: {}'.format(' '.join(trg)))
+        src_tokens = engine._dataset._processor.tokenize(FLAGS.sentence, 0)
+        src = engine._dataset.decode_bert(src_tokens)
+        engine.display_attention(src, trg, attn)
 
     logging.info('Done!')
 

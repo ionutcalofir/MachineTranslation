@@ -105,6 +105,8 @@ class BaseDataset():
 
         self.vocab_l0 = self._build_vocab(0)
         self.vocab_l1 = self._build_vocab(1)
+        print(len(self.vocab_l0))
+        print(len(self.vocab_l1))
 
         if self._use_w2v:
             self.w2v_l0 = self._build_word2vec(self.vocab_l0)
@@ -181,6 +183,7 @@ class BaseDataset():
         keys = sorted(vocab.keys())
         for key in keys:
             if vocab[key][0] >= 3:
+            # if vocab[key][0] >= 15:
                 preprocess_vocab[key] = (vocab[key][0], len(preprocess_vocab))
         logging.info('Avg tokens per sent for l{}: {}'.format(l, avg_sent / len(self.train)))
 

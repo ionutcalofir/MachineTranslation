@@ -1,6 +1,8 @@
 import time
 import math
 import torch.nn as nn
+import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 import torch.utils.data
 from torchtext.data.metrics import bleu_score
 
@@ -303,3 +305,24 @@ class Engine:
             # print()
 
         return bleu_score(pred_trgs, trgs)
+
+    def display_attention(self, sentence, translation, attention, n_heads=4, n_rows=2, n_cols=2):
+        assert n_rows * n_cols == n_heads
+
+        fig = plt.figure(figsize=(15,25))
+        for i in range(n_heads):
+            ax = fig.add_subplot(n_rows, n_cols, i+1)
+
+            _attention = attention.squeeze(0)[i].cpu().detach().numpy()
+
+            cax = ax.matshow(_attention, cmap='bone')
+
+            ax.tick_params(labelsize=12)
+            ax.set_xticklabels(['']+['<sos>']+[t.lower() for t in sentence]+['<eos>'], 
+                               rotation=45)
+            ax.set_yticklabels(['']+translation)
+
+            ax.xaxis.set_major_locator(ticker.MultipleLocator(1))
+            ax.yaxis.set_major_locator(ticker.MultipleLocator(1))
+
+        plt.show()
